@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RollCall | Nature & School Attendance</title>
+    <title>RollCall | Nature & School Sanctuary</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -14,26 +14,32 @@
           extend: {
             colors: {
               forest: {
-                50: '#f0fdf4',
-                100: '#dcfce7',
-                200: '#bbf7d0',
-                300: '#86efac',
-                400: '#4ade80',
-                500: '#22c55e',
-                600: '#16a34a',
-                700: '#15803d',
-                800: '#166534',
-                900: '#14532d',
-                950: '#052e16',
+                50: '#f2f9f3',
+                100: '#e1f2e4',
+                200: '#c5e5cb',
+                300: '#99d0a3',
+                400: '#64b473',
+                500: '#3e984f',
+                600: '#2f7c3e',
+                700: '#276233',
+                800: '#234f2c',
+                900: '#1e4226',
+                950: '#0c2313',
               },
-              moss: {
-                DEFAULT: '#4d7c0f',
-                dark: '#365314',
-                light: '#a3e635'
+              leaf: {
+                light: '#ecfccb',
+                DEFAULT: '#84cc16',
+                dark: '#4d7c0f'
               },
-              sage: '#84a98c',
-              earth: '#52796f',
-              canopy: '#2f3e46'
+              bark: {
+                50: '#fdf8f6',
+                100: '#f2e8e5',
+                200: '#eaddd7',
+                700: '#78350f',
+                800: '#582b14',
+                900: '#381a08',
+              },
+              parchment: '#f7faf5'
             },
             fontFamily: {
               sans: ['Nunito', 'sans-serif'],
@@ -44,10 +50,17 @@
       }
     </script>
     <style>
-      body { font-family: 'Nunito', sans-serif; }
+      body { 
+        font-family: 'Nunito', sans-serif; 
+        background: radial-gradient(circle at 10% 20%, rgba(220, 252, 231, 0.4) 0%, rgba(247, 250, 245, 1) 90%);
+      }
       @keyframes sway {
         0%, 100% { transform: rotate(0deg); }
         50% { transform: rotate(3deg); }
+      }
+      @keyframes floatSlow {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-8px) rotate(4deg); }
       }
       .animate-sway {
         animation: sway 6s ease-in-out infinite;
@@ -57,9 +70,27 @@
         animation: sway 9s ease-in-out infinite reverse;
         transform-origin: bottom left;
       }
+      .animate-float {
+        animation: floatSlow 7s ease-in-out infinite;
+      }
+      /* Custom natural scrollbars */
+      ::-webkit-scrollbar {
+        width: 7px;
+        height: 7px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f6ed;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #a7d0b0;
+        border-radius: 9999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #529864;
+      }
     </style>
   </head>
-  <body class="bg-[#f7f9f5] min-h-screen text-slate-800 antialiased selection:bg-forest-200 selection:text-forest-900">
+  <body class="bg-parchment min-h-screen text-slate-800 antialiased selection:bg-forest-200 selection:text-forest-900">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
