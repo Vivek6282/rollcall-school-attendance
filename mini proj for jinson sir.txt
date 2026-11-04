@@ -1,0 +1,100 @@
+You are a senior full-stack engineer. Build a complete, working, Dockerized school attendance web app called "RollCall" in ONE response. Output every file in full. No placeholders, TODOs, "..." or omitted code. It must run with a single `docker compose up --build` on a clean machine.
+
+## STACK (exact)
+- Backend: Python 3.12, Django 5.0, djangorestframework 3.15, djangorestframework-simplejwt 5.3, psycopg[binary] 3.2, gunicorn 22
+- DB: postgres:16-alpine
+- Frontend: React 18 + Vite 5 (plain JSX, no TypeScript), react-router-dom 6, axios 1, recharts 2. Load Tailwind through the Play CDN <script src="https://cdn.tailwindcss.com"></script> in index.html (no Tailwind build config).
+- Web server: nginx:alpine serves the built React app, proxies /api/ to the backend, and serves /media/ from a shared volume.
+
+## ROLES
+- admin: manages classes and users (CRUD), sees analytics for every student. Also is_staff + is_superuser.
+- teacher: assigned to classes; marks attendance for students in their classes; reviews leave requests.
+- student: belongs to one class; views own attendance history and percentage; submits leave requests with an uploaded document (the "storage" feature).
+
+## FILE TREE (create exactly these files, nothing else)
+docker-compose.yml
+.env.example
+backend/Dockerfile
+backend/requirements.txt
+backend/manage.py
+backend/config/__init__.py   (empty)
+backend/config/settings.py
+backend/config/urls.py
+backend/config/wsgi.py
+backend/core/__init__.py      (empty)
+backend/core/apps.py
+backend/core/models.py
+backend/core/serializers.py
+backend/core/views.py
+backend/core/admin.py
+backend/core/management/__init__.py          (empty)
+backend/core/management/commands/__init__.py (empty)
+backend/core/management/commands/seed.py
+frontend/Dockerfile
+frontend/nginx.conf
+frontend/package.json
+frontend/vite.config.js
+frontend/index.html
+frontend/src/main.jsx
+frontend/src/api.js
+frontend/src/App.jsx          (router, auth context, layout, login page)
+frontend/src/Student.jsx
+frontend/src/Teacher.jsx
+frontend/src/Admin.jsx
+
+## DOCKER
+- Services: db, backend, web. Named volumes: pgdata, media.
+- db: healthcheck `pg_isready -U $POSTGRES_USER -d $POSTGRES_DB` (interval 3s, retries 20). backend depends_on db with condition: service_healthy.
+- backend command (sh -c): `python manage.py makemigrations core && python manage.py migrate && python manage.py seed && gunicorn config.wsgi -b 0.0.0.0:8000 -w 3`. Mount the media volume at /app/media.
+- web: multi-stage frontend/Dockerfile (node:20-alpine runs `npm install && npm run build`, then nginx:alpine copies dist to /usr/share/nginx/html plus nginx.conf). Mount the media volume read-only at /media. Publish 8080:80.
+- nginx.conf: `location /api/ { proxy_pass http://backend:8000; proxy_set_header Host $host; client_max_body_size 10M; }`, `location /media/ { alias /media/; }`, `location / { try_files $uri /index.html; }`.
+- Same origin through nginx, so do NOT use django-cors-headers.
+- Environment comes from .env (copy of .env.example): POSTGRES_DB=rollcall, POSTGRES_USER=rollcall, POSTGRES_PASSWORD=rollcall, DJANGO_SECRET_KEY=change-me, DEBUG=0. backend reads POSTGRES_* with host "db".
+
+## BACKEND
+settings.py: AUTH_USER_MODEL="core.User"; INSTALLED_APPS includes admin, auth, contenttypes, sessions, messages, staticfiles, rest_framework, core; ALLOWED_HOSTS=["*"]; MEDIA_ROOT=BASE_DIR/"media"; MEDIA_URL="/media/"; DRF DEFAULT_AUTHENTICATION_CLASSES = JWTAuthentication only; DEFAULT_PERMISSION_CLASSES = IsAuthenticated; SIMPLE_JWT ACCESS_TOKEN_LIFETIME = 1 day (no refresh flow needed on the client); TIME_ZONE="UTC"; USE_TZ=True.
+
+models.py:
+- User(AbstractUser): role CharField choices admin/teacher/student, default student; classroom FK -> Classroom, null/blank, related_name="students", on_delete SET_NULL.
+- Classroom: name (unique), grade (CharField), teacher FK -> User null, related_name="classes", limit_choices_to role=teacher, on_delete SET_NULL.
+- Attendance: student FK User (related_name="attendance", CASCADE), classroom FK, date DateField, status choices present/absent/late/excused, marked_by FK User null SET_NULL related_name="+", created_at auto. Meta unique_together (student, date), ordering ["-date"].
+- LeaveRequest: student FK (CASCADE), date, reason TextField, document FileField(upload_to="leaves/%Y/%m/", blank=True), status pending/approved/rejected default pending, created_at. ordering ["-created_at"].
+Define Classroom before User OR use the string reference "core.Classroom" to avoid ordering errors.
+
+serializers.py: UserSerializer (id, username, first_name, last_name, email, role, classroom, password write_only, required=False; create/update call set_password when a password is given; role "admin" sets is_staff=is_superuser=True). ClassroomSerializer (+ read-only teacher_name, student_count). AttendanceSerializer (+ read-only student_name). LeaveRequestSerializer (+ read-only student_name; student and status read-only for students). A TokenObtainPairSerializer subclass adds role and username to the token AND to the response body.
+
+views.py (ViewSets + DefaultRouter, all under /api/):
+- POST /api/auth/login/ -> custom TokenObtainPairView
+- GET /api/me/ -> current user serialized
+- /api/users/ ModelViewSet: admin full CRUD; teacher read-only students in their classes; filter ?role= & ?classroom=
+- /api/classes/ ModelViewSet: admin write; teacher reads own classes; student reads own class
+- /api/attendance/ ModelViewSet: student reads only own; teacher CRUD only for their classes; admin all. Filters ?classroom= ?date= ?student=. perform_create sets marked_by.
+- POST /api/attendance/bulk/ (@action detail=False) body {classroom, date, records:[{student, status}]} -> update_or_create per record inside transaction.atomic; teacher must own the class (else 403).
+- /api/leaves/ ModelViewSet with MultiPartParser+FormParser+JSONParser: student creates (student=request.user) and lists own; teacher lists leaves of students in their classes and can PATCH status; on "approved", update_or_create Attendance(status="excused") for that date. admin all.
+- GET /api/analytics/ (admin only, else 403): { totals:{students, teachers, classes, records, overall_rate}, per_student:[{id, name, classroom, present, absent, late, excused, rate}], per_class:[{name, rate}], trend:[{date, rate}] for last 30 days }. rate = (present+late+excused)/total*100 rounded to 1 decimal, or 0 when total is 0. Use ORM aggregation with Count(filter=Q(...)), no N+1 queries.
+Use a small helper for queryset scoping by role. Return 403 via PermissionDenied, never 500.
+
+config/urls.py: admin/ (Django admin at /api/admin/ path is NOT needed; mount Django admin at "django-admin/" but nginx only proxies /api, so it's optional), include router at "api/", plus the login and me routes. Do NOT serve media from Django (nginx does it).
+
+seed.py (idempotent: exit early if User "admin" exists): admin/admin123, teachers t.sharma/teach123 and t.okafor/teach123, 2 classrooms ("Grade 8 - Sunflower", "Grade 9 - Oak"), 10 students s1..s10 / stud123 with realistic names split across classes, and attendance for the last 20 weekdays with a weighted random mix (~85% present) using random.seed(42).
+
+## FRONTEND (school vibe)
+Look: warm paper background (bg-amber-50), chalkboard-green header (bg-emerald-800) with an apple 🍎 logo and "RollCall", a font that looks good on a ruled notebook (load "Nunito" from Google Fonts in index.html), rounded-2xl cards with soft shadows, status pills (present=green, absent=red, late=amber, excused=sky). Responsive down to 375px.
+
+api.js: axios instance baseURL "/api"; a request interceptor adds `Authorization: Bearer <token>` from localStorage; a response interceptor clears the token and redirects to /login on 401.
+
+App.jsx: AuthContext {user, login, logout}. On load, if a token exists, GET /me. Login page (username/password, error message, demo credentials listed). The router sends users by role: /student, /teacher, /admin; a protected route rejects the wrong role. Header shows name, role badge, logout.
+
+Student.jsx: attendance % ring/big number + counts, history table (date, status pill), "Request Leave" form (date, reason, file input -> FormData POST), list of own leave requests with status and a link to the document.
+
+Teacher.jsx: class selector + date picker (default today), roster with 4 toggle buttons per student, "Mark all present", Save -> POST /attendance/bulk/, loads existing marks for that date. Second tab: pending leave requests with document link, Approve/Reject.
+
+Admin.jsx: KPI cards (students, teachers, classes, overall rate), Recharts LineChart (30-day trend), BarChart (rate per class), sortable student table with rate (rows <75% highlighted red, "At risk" badge), search box. Second tab: user CRUD (table + modal form for create/edit with role and classroom select, delete with confirm()). Third tab: class CRUD (name, grade, teacher select).
+
+Every request shows loading and error states; show empty states when lists are empty.
+
+## HARD RULES
+1. Total ≤ 1000 lines across all files listed (auto-generated migrations and package-lock excluded). Write dense, idiomatic code; don't create extra abstractions.
+2. No missing imports, no undefined variables, no references to files not in the tree.
+3. All package versions pinned in requirements.txt and package.json.
+4. After the code, output: (a) run instructions: `cp .env.example .env` then `docker compose up --build`, open http://localhost:8080; (b) demo credentials; (c) a table of each file with its line count and the total; (d) a self-review checklist where you re-check: user model defined before first migrate, db healthcheck gating, nginx proxy paths, JWT header, role-based queryset scoping, unique (student,date) handled by update_or_create, multipart upload works, media served by nginx, every frontend import resolves. Fix anything that fails before you answer.

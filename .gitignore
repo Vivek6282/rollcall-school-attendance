@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Database / SQLite
+*.sqlite3
+*.db
+
+# Media uploads (local storage)
+media/
+backend/media/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
