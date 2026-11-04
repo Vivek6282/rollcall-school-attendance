@@ -188,3 +188,4 @@ The seed script creates realistic demo users ready for testing immediately. You 
   ```bash
   docker compose logs -f backend
   ```
+

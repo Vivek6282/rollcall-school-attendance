@@ -12,16 +12,22 @@ class User(AbstractUser):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="student")
     classroom = models.ForeignKey(Classroom, on_delete=models.SET_NULL, null=True, blank=True, related_name="students")
 
+class Subject(models.Model):
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=20, unique=True)
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name="subjects", null=True, blank=True)
+    def __str__(self): return f"{self.name} ({self.code})"
+
 class Attendance(models.Model):
     STATUS_CHOICES = [("present", "Present"), ("absent", "Absent"), ("late", "Late"), ("excused", "Excused")]
     student = models.ForeignKey(User, on_delete=models.CASCADE, related_name="attendance")
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name="attendance")
+    subject = models.ForeignKey(Subject, on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance")
     date = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     marked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:
-        unique_together = ("student", "date")
         ordering = ["-date"]
 
 class LeaveRequest(models.Model):

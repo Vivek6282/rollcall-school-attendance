@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import User, Classroom, Attendance, LeaveRequest
+from .models import User, Classroom, Subject, Attendance, LeaveRequest
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -28,19 +28,26 @@ class UserSerializer(serializers.ModelSerializer):
         if pwd: inst.set_password(pwd)
         inst.save(); return inst
 
+class SubjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subject
+        fields = ["id", "name", "code", "classroom"]
+
 class ClassroomSerializer(serializers.ModelSerializer):
     teacher_name = serializers.SerializerMethodField()
     student_count = serializers.IntegerField(source="students.count", read_only=True)
+    subjects = SubjectSerializer(many=True, read_only=True)
     class Meta:
         model = Classroom
-        fields = ["id", "name", "grade", "teacher", "teacher_name", "student_count"]
+        fields = ["id", "name", "grade", "teacher", "teacher_name", "student_count", "subjects"]
     def get_teacher_name(self, o): return (o.teacher.get_full_name() or o.teacher.username) if o.teacher else ""
 
 class AttendanceSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
+    subject_name = serializers.CharField(source="subject.name", read_only=True)
     class Meta:
         model = Attendance
-        fields = ["id", "student", "student_name", "classroom", "date", "status", "marked_by", "created_at"]
+        fields = ["id", "student", "student_name", "classroom", "subject", "subject_name", "date", "status", "marked_by", "created_at"]
         read_only_fields = ["marked_by", "created_at"]
     def get_student_name(self, o): return o.student.get_full_name() or o.student.username
 
